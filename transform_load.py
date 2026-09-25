@@ -58,7 +58,7 @@ def prepararDados(dados):
     # 5. Remoção de colunas que não agregam ao modelo ou possuem excesso de nulos:
     colunas_remover = [
         'id_anuncio', 'data_coleta', 'url_anuncio', 'descricao_texto',
-        'iptu_periodo', 'valor_condominio', 'comodidades_lista'
+        'iptu_periodo', 'comodidades_lista',
     ]
     dados.drop(columns=[col for col in colunas_remover if col in dados.columns], inplace=True)
 
@@ -73,6 +73,8 @@ def prepararDados(dados):
     # Nota: se desejar focar até 5 milhões para maior homogeneidade e R² maior, ajuste preco_max=5000000
     dados = dados[dados["preco_venda"].between(50000, 5000000)]
     dados = dados[dados["area_util"].between(15, 1500)]
+    dados = dados[dados["valor_condominio"].between(0, 4000)]
+    dados = dados[dados["valor_iptu"].between(0, 15000)]
 
     # 8. Decodifica dados categóricos em valores numéricos (LabelEncoder)
     lb_tipo = LabelEncoder()
@@ -87,69 +89,6 @@ def prepararDados(dados):
     print(f"Dimensões finais (linhas, colunas): {dados.shape}")
 
     return dados
-
-def gerarBoxplot(dados):
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-
-    # Boxplot da Área Útil
-    axes[0].boxplot(dados['area_util'])
-    axes[0].set_title("Boxplot da Área Útil (m²)")
-    axes[0].set_ylabel("Área (m²)")
-
-    # Boxplot do Preço de Venda em Milhões de R$
-    axes[1].boxplot(dados['preco_venda'] / 1e6)
-    axes[1].set_title("Boxplot do Preço de Venda (Milhões de R$)")
-    axes[1].set_ylabel("Valor (Milhões de R$)")
-
-    plt.tight_layout()
-    plt.show()
-
-def graficoBarras(dados):
-    fig, ax = plt.subplots(figsize=(8, 5))
-
-    # Contagem de registros por tipo de imóvel
-    contagem = dados['tipo_imovel'].value_counts().sort_index()
-    nomes_tipos = ['Apartamento', 'Casa', 'Kitnet'] if len(contagem) == 3 else [str(i) for i in contagem.index]
-    cores = ['tab:blue', 'tab:green', 'tab:orange']
-
-    ax.bar(nomes_tipos, contagem.values, color=cores[:len(contagem)])
-    ax.set_ylabel('Quantidade de Imóveis')
-    ax.set_title('Distribuição por Tipo de Imóvel (apartamento, casa, kitnet)')
-
-    for i, v in enumerate(contagem.values):
-        ax.text(i, v + 40, str(v), ha='center', fontweight='bold')
-
-    plt.tight_layout()
-    plt.show()
-
-def visualizarDados(dados):
-    print("\nGerando visualizações gráficas...")
-    try:
-        # Histograma do target (preco_venda em Milhões de R$)
-        plt.figure(figsize=(8, 4))
-        (dados['preco_venda'] / 1e6).hist(bins=30, edgecolor='black', color='steelblue')
-        plt.title("Distribuição do Preço de Venda (Milhões de R$)")
-        plt.xlabel("Preço de Venda (Milhões de R$)")
-        plt.ylabel("Frequência")
-        plt.tight_layout()
-        plt.show()
-
-        # Histograma da área útil
-        plt.figure(figsize=(8, 4))
-        dados['area_util'].hist(bins=30, edgecolor='black', color='coral')
-        plt.title("Distribuição da Área Útil (m²)")
-        plt.xlabel("Área Útil (m²)")
-        plt.ylabel("Frequência")
-        plt.tight_layout()
-        plt.show()
-
-        # Boxplots para visualização de dispersão
-        gerarBoxplot(dados)
-
-        # Gráfico de barras da nova coluna tipo_imovel
-        graficoBarras(dados)
-    except Exception as e:
-        print(f"Aviso: Não foi possível renderizar gráficos na tela ({e}). O fluxo do pipeline continuará normalmente.")
 
 def salvar_base_silver(dados, caminho_silver=CAMINHO_SILVER):
     """
@@ -192,11 +131,7 @@ def executar_transform_load(caminho_bronze=CAMINHO_BRONZE, caminho_silver=CAMINH
     # 2. Transformação
     dados_silver = prepararDados(dados_brutos)
 
-    # 3. Visualização (se solicitada)
-    if visualizar:
-        visualizarDados(dados_silver)
-
-    # 4. Carga (Load) na camada Silver
+    # 3. Carga (Load) na camada Silver
     salvar_base_silver(dados_silver, caminho_silver)
 
     return dados_silver

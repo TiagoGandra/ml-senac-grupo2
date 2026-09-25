@@ -14,7 +14,13 @@ from sklearn.tree import DecisionTreeRegressor
 from sklearn.neighbors import KNeighborsRegressor
 
 # CRISP-DM fase 5: Métricas de Avaliação de Regressão
-from sklearn.metrics import r2_score, mean_absolute_error, mean_squared_error
+from sklearn.metrics import (
+    r2_score, 
+    mean_absolute_error, 
+    mean_squared_error,
+    mean_absolute_percentage_error,
+    median_absolute_error
+)
 
 # Importa a função de carga da base Silver do módulo transform_load
 from transform_load import carregar_base_silver, CAMINHO_SILVER
@@ -78,14 +84,15 @@ def treinarModelo(x_train, y_train):
 def avaliarListaModelos(listaModelos, x_test, y_test):
     """
     CRISP-DM: Fase 5 - Avaliação (Test & Score)
-    Calcula R², MAE e RMSE para cada modelo no conjunto de teste e elege o melhor.
+    Calcula métricas estatísticas (R², MAE, RMSE) e métricas de mercado imobiliário
+    (MAPE, MdAPE e taxa de acerto dentro da margem de negociação de +-15%).
     """
     listaPredicoes = list()
     listaScoresR2 = list()
 
-    print("\n--- Avaliação dos Modelos de Regressão (Test & Score) ---")
-    print(f"{'Modelo':<28} | {'R² Score':<10} | {'MAE (R$)':<18} | {'RMSE (R$)':<18}")
-    print("-" * 80)
+    print("\n--- Avaliação dos Modelos de Regressão (Test & Score com Métricas de Mercado) ---")
+    print(f"{'Modelo':<26} | {'R²':<7} | {'MAE (R$)':<15} | {'RMSE (R$)':<15} | {'MAPE':<8} | {'MdAPE':<8} | {'Acc ±15%':<9}")
+    print("-" * 102)
 
     for modelo in listaModelos:
         y_pred = modelo.predict(x_test)
@@ -95,14 +102,35 @@ def avaliarListaModelos(listaModelos, x_test, y_test):
         mae = mean_absolute_error(y_test, y_pred)
         rmse = np.sqrt(mean_squared_error(y_test, y_pred))
 
+        # Métricas de mercado imobiliário (relativas / tolerância de negociação)
+        erros_pct = np.abs((y_test - y_pred) / y_test) * 100
+        mape = np.mean(erros_pct)
+        mdape = np.median(erros_pct)
+        acc_15 = np.mean(erros_pct <= 15.0) * 100
+
         listaScoresR2.append(r2)
         nome_modelo = modelo.__class__.__name__
-        print(f"{nome_modelo:<28} | {r2:<10.4f} | R$ {mae:<15,.2f} | R$ {rmse:<15,.2f}")
+        print(f"{nome_modelo:<26} | {r2:<7.4f} | R$ {mae:<12,.2f} | R$ {rmse:<12,.2f} | {mape:<7.2f}% | {mdape:<7.2f}% | {acc_15:<8.1f}%")
 
-    print("-" * 80)
+    print("-" * 102)
     melhor_indice = listaScoresR2.index(max(listaScoresR2))
     melhor_modelo = listaModelos[melhor_indice]
     print(f"Melhor Modelo Selecionado: {melhor_modelo.__class__.__name__} com R² = {max(listaScoresR2):.4f}")
+
+    # Exibe resumo analítico de mercado do melhor modelo
+    y_pred_melhor = listaPredicoes[melhor_indice]
+    erros_melhor = np.abs((y_test - y_pred_melhor) / y_test) * 100
+    medae_rs = np.median(np.abs(y_test - y_pred_melhor))
+    acc_10 = np.mean(erros_melhor <= 10.0) * 100
+    acc_15 = np.mean(erros_melhor <= 15.0) * 100
+    acc_20 = np.mean(erros_melhor <= 20.0) * 100
+
+    print(f"\n[MÉTRICAS DE MERCADO DO MELHOR MODELO - {melhor_modelo.__class__.__name__}]")
+    print(f"  • MdAPE (Erro % mediano Zillow/AVM): {np.median(erros_melhor):.2f}% (50% dos imóveis têm erro menor que este valor)")
+    print(f"  • MedAE (Erro mediano em R$): R$ {medae_rs:,.2f}")
+    print(f"  • Acurácia com tolerância de ±10%: {acc_10:.1f}% dos imóveis")
+    print(f"  • Acurácia com tolerância de ±15%: {acc_15:.1f}% dos imóveis (margem típica de negociação)")
+    print(f"  • Acurácia com tolerância de ±20%: {acc_20:.1f}% dos imóveis")
 
     return melhor_modelo
 
@@ -139,7 +167,8 @@ def validacaoModelo(modelo, x_validacao, y_validacao=None):
             real_formatado = f"R$ {real_val:,.2f}"
             diff = y_pred[i] - real_val
             diff_formatado = f"R$ {diff:,.2f}"
-            print(f"Exemplo {i+1} -> Preço Previsto: {pred_formatado} | Preço Real: {real_formatado} | Diferença: {diff_formatado}")
+            diff_pct = (diff / real_val) * 100
+            print(f"Exemplo {i+1} -> Preço Previsto: {pred_formatado} | Preço Real: {real_formatado} | Diferença: {diff_formatado} ({diff_pct:+.1f}%)")
         else:
             print(f"Exemplo {i+1} -> Preço Previsto: {pred_formatado}")
 
