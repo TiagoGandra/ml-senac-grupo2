@@ -1,12 +1,8 @@
 # CRISP-DM: preparação de dados fase 3 (ETL - Transform & Load)
 import os
 import pandas as pd
-import numpy as np  
+import pickle
 
-import matplotlib
-if not os.environ.get('DISPLAY'):
-    matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 from sklearn.preprocessing import LabelEncoder
 
 # Integração com a camada Bronze (Extração)
@@ -24,33 +20,60 @@ def prepararDados(dados):
     print("\n--- Informações iniciais dos dados brutos ---")
     print(dados.info())
 
-    # 1. Deduplicação
+    dados = (
+        dados   
+        .pipe(deduplicacao)
+        .pipe(criar_tipo_imovel)
+        .pipe(tipagem)
+        .pipe(preencher_nulos)
+        .pipe(filtrar_outliers)
+        .pipe(codificar_categoricas)
+        .pipe(selecionar_colunas)
+    )
+
+    # Remoção de nulos restantes
+    dados.dropna(inplace=True)
+
+    print("\n--- Informações após preparação dos dados básicos ---")
+    print(dados.info())
+    print(dados.head())
+    print(f"Dimensões finais (linhas, colunas): {dados.shape}")
+
+    return dados
+
+def deduplicacao(dados):
     antes = len(dados)
     if "data_coleta" in dados.columns:
         dados.sort_values("data_coleta", ascending=False, inplace=True)
     dados.drop_duplicates(subset=["url_anuncio"] if "url_anuncio" in dados.columns else None, inplace=True)
     print(f"\nDeduplicação: {antes - len(dados)} duplicatas removidas ({antes} -> {len(dados)})")
+    return dados
 
-    # 2. Extração do tipo de imóvel a partir da URL
+def criar_tipo_imovel(dados):
     dados['tipo_imovel'] = dados['url_anuncio'].str.extract(r'/imovel/([^/-]+)', expand=False)
     dados = dados[dados['tipo_imovel'].isin(['apartamento', 'kitnet', 'casa'])].copy()
+    return dados
 
-    # 3. Tipagem das colunas numéricas e imputações básicas
+def tipagem(dados):
     for col in ["preco_venda", "area_util", "quartos", "suites", "vagas"]:
         if col in dados.columns:
             dados[col] = pd.to_numeric(dados[col], errors="coerce")
+    return dados
 
+def preencher_nulos(dados):
     dados['quartos'] = dados['quartos'].fillna(1.0)
     dados['suites'] = dados['suites'].fillna(0.0)
     dados['vagas'] = dados['vagas'].fillna(0.0)
     dados['valor_condominio'] = pd.to_numeric(dados.get('valor_condominio', 0), errors='coerce').fillna(0.0)
+    return dados
 
-    # 4. Filtro de limites plausíveis de mercado (remoção de outliers extremos)
+def filtrar_outliers(dados):
+    # 1. Filtro de limites plausíveis de mercado (remoção de outliers extremos)
     dados = dados[dados["preco_venda"].between(50000, 5000000)].copy()
     dados = dados[dados["area_util"].between(15, 1200)].copy()
     dados = dados[dados["valor_condominio"].between(0, 4000)].copy()
 
-    # 4.1 Filtro de consistência de mercado (Preço por m²):
+    # 2 Filtro de consistência de mercado (Preço por m²):
     # Remove anúncios com erros evidentes de digitação ou inconsistências cadastrais grosseiras
     preco_m2 = dados["preco_venda"] / dados["area_util"]
     q_low = preco_m2.quantile(0.015)
@@ -58,29 +81,32 @@ def prepararDados(dados):
     qtd_antes_m2 = len(dados)
     dados = dados[preco_m2.between(q_low, q_high)].copy()
     print(f"\nFiltro de consistência de preço/m²: {qtd_antes_m2 - len(dados)} inconsistências removidas (faixa: R$ {q_low:,.2f}/m² a R$ {q_high:,.2f}/m²)")
+    return dados
 
-    # 5. Seleção estrita das características normais/essenciais
-    colunas_finais = [
-        'preco_venda', 'tipo_imovel', 'bairro_quadra', 
-        'area_util', 'quartos', 'suites', 'vagas', 'valor_condominio'
-    ]
-    dados = dados[colunas_finais].copy()
-
-    # 6. Remoção de eventuais nulos restantes
-    dados.dropna(inplace=True)
-
-    # 7. Codificação categórica para modelagem (LabelEncoder)
+def codificar_categoricas(dados):
     lb_tipo = LabelEncoder()
     dados['tipo_imovel'] = lb_tipo.fit_transform(dados['tipo_imovel']) # 0=apartamento, 1=casa, 2=kitnet
 
     lb_bairro = LabelEncoder()
     dados['bairro_quadra'] = lb_bairro.fit_transform(dados['bairro_quadra'].astype(str))
 
-    print("\n--- Informações após preparação dos dados básicos ---")
-    print(dados.info())
-    print(dados.head())
-    print(f"Dimensões finais (linhas, colunas): {dados.shape}")
+    # salvar dicionario da codificação, para mapear os valores codificados
+    with open("data/lb_tipo.pickle", "wb") as f:
+        pickle.dump(lb_tipo, f)
 
+    with open("data/lb_bairro.pickle", "wb") as f:
+        pickle.dump(lb_bairro, f)
+
+    return dados
+
+def selecionar_colunas(dados):
+        # 1. Seleção das colunas finais
+    # basicamente uma copia do dataframe com as colunas abaixo
+    colunas_finais = [
+        'preco_venda', 'tipo_imovel', 'bairro_quadra', 
+        'area_util', 'quartos', 'suites', 'vagas', 'valor_condominio'
+    ]
+    dados = dados[colunas_finais].copy()
     return dados
 
 def salvar_base_silver(dados, caminho_silver=CAMINHO_SILVER):
