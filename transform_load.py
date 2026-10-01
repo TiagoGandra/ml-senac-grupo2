@@ -27,6 +27,7 @@ def prepararDados(dados):
         .pipe(tipagem)
         .pipe(preencher_nulos)
         .pipe(filtrar_outliers)
+        .pipe(filtrar_bairros_frequentes)
         .pipe(codificar_categoricas)
         .pipe(selecionar_colunas)
     )
@@ -81,6 +82,22 @@ def filtrar_outliers(dados):
     qtd_antes_m2 = len(dados)
     dados = dados[preco_m2.between(q_low, q_high)].copy()
     print(f"\nFiltro de consistência de preço/m²: {qtd_antes_m2 - len(dados)} inconsistências removidas (faixa: R$ {q_low:,.2f}/m² a R$ {q_high:,.2f}/m²)")
+    return dados
+
+def filtrar_bairros_frequentes(dados, min_amostras=20):
+    """
+    CRISP-DM Fase 3: Preparação dos Dados
+    Remove bairros com contagem de imóveis inferior ao limiar mínimo (20 imóveis),
+    eliminando ruído estatístico de regiões com amostragem insuficiente e protegendo
+    a divisão treino-teste contra classes raras não generalizáveis.
+    """
+    contagem = dados['bairro_quadra'].value_counts()
+    bairros_validos = contagem[contagem >= min_amostras].index
+    bairros_removidos = contagem[contagem < min_amostras].index.tolist()
+    qtd_antes = len(dados)
+    dados = dados[dados['bairro_quadra'].isin(bairros_validos)].copy()
+    removidos = qtd_antes - len(dados)
+    print(f"\nFiltro de bairros (< {min_amostras} imóveis): {removidos} registros removidos em {len(bairros_removidos)} bairros raros: {bairros_removidos}")
     return dados
 
 def codificar_categoricas(dados):

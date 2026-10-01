@@ -25,6 +25,8 @@ from transform_load import carregar_base_silver, CAMINHO_SILVER
 
 NOMEMODELO = "imoveis-modelo.pickle"
 ARQUIVO_GRAFICO = "grafico_real_vs_predito.png"
+ARQUIVO_MEDIA_BAIRRO = "data/media_m2_bairro.pickle"
+CAMINHO_LB_BAIRRO = "data/lb_bairro.pickle"
 
 def separarDados(dados):
     """
@@ -46,6 +48,30 @@ def separarDados(dados):
     print(f"Tamanho do teste (30%): {x_test.shape[0]} registros")
 
     return x_train, x_test, y_train, y_test
+
+def aplicar_target_encoding_bairro(x_train, y_train, x_test, caminho_pickle=ARQUIVO_MEDIA_BAIRRO):
+    """
+    CRISP-DM Fase 4: Engenharia de Features sem Data Leakage (Zero Target Leakage).
+    Calcula a métrica de preço/m² médio por bairro estritamente sobre o conjunto de treino (70%)
+    e a projeta sobre treino e teste. Persiste os parâmetros para uso em inferência futura.
+    """
+    preco_m2_treino = y_train / x_train['area_util']
+    mapa_bairro = preco_m2_treino.groupby(x_train['bairro_quadra']).mean().to_dict()
+    media_global = float(preco_m2_treino.mean())
+
+    os.makedirs(os.path.dirname(caminho_pickle), exist_ok=True)
+    with open(caminho_pickle, "wb") as f:
+        pickle.dump({"mapa": mapa_bairro, "media_global": media_global}, f)
+    print(f"\n[ENGENHARIA DE FEATURES] Preço médio por m² calculado para {len(mapa_bairro)} bairros no treino.")
+    print(f"Artefato salvo em '{caminho_pickle}' (Média global de fallback: R$ {media_global:,.2f}/m²).")
+
+    x_train_feat = x_train.copy()
+    x_test_feat = x_test.copy()
+
+    x_train_feat['preco_m2_bairro'] = x_train_feat['bairro_quadra'].map(mapa_bairro).fillna(media_global)
+    x_test_feat['preco_m2_bairro'] = x_test_feat['bairro_quadra'].map(mapa_bairro).fillna(media_global)
+
+    return x_train_feat, x_test_feat
 
 def treinarModelo(x_train, y_train):
     """
@@ -101,6 +127,43 @@ def avaliarListaModelos(listaModelos, x_test, y_test):
     print(f"Melhor Modelo Selecionado: {melhor_modelo.__class__.__name__} com R² = {melhor_r2:.4f}")
     return melhor_modelo
 
+def avaliarPorBairro(modelo, x_test, y_test, caminho_lb_bairro=CAMINHO_LB_BAIRRO):
+    """
+    CRISP-DM Fase 5: Métrica Diagnóstica por Bairro.
+    Avalia o desempenho do modelo segmentado regionalmente no conjunto de teste,
+    calculando a quantidade de amostras, MAE (R$), erro mediano percentual (MdAPE)
+    e percentual de predições dentro da margem de tolerância de +/- 15%.
+    """
+    print("\n--- Avaliação Diagnóstica de Desempenho por Bairro (Test Set) ---")
+    if not os.path.exists(caminho_lb_bairro):
+        print(f"Aviso: Encoder de bairros '{caminho_lb_bairro}' não encontrado para decodificação.")
+        return
+
+    with open(caminho_lb_bairro, "rb") as f:
+        lb_bairro = pickle.load(f)
+
+    y_pred = modelo.predict(x_test)
+    df_diag = x_test.copy()
+    df_diag['real'] = y_test.values
+    df_diag['pred'] = y_pred
+    df_diag['erro_abs'] = np.abs(df_diag['real'] - df_diag['pred'])
+    df_diag['erro_pct'] = (df_diag['erro_abs'] / df_diag['real']) * 100
+    df_diag['acerto_15pct'] = df_diag['erro_pct'] <= 15.0
+    df_diag['nome_bairro'] = lb_bairro.inverse_transform(df_diag['bairro_quadra'])
+
+    resumo_bairro = df_diag.groupby('nome_bairro').agg(
+        qtd=('real', 'count'),
+        mae=('erro_abs', 'mean'),
+        mdape=('erro_pct', 'median'),
+        acuracia_15pct=('acerto_15pct', lambda x: (x.sum() / len(x)) * 100)
+    ).sort_values('qtd', ascending=False)
+
+    print(f"{'Bairro':<24} | {'Amostras':<8} | {'MAE (R$)':<16} | {'Erro Mediano %':<15} | {'Acurácia ±15%':<14}")
+    print("-" * 88)
+    for nome, row in resumo_bairro.iterrows():
+        print(f"{nome:<24} | {int(row['qtd']):<8} | R$ {row['mae']:<13,.2f} | {row['mdape']:<14.2f}% | {row['acuracia_15pct']:<13.1f}%")
+    print("-" * 88)
+
 def salvarModelo(nomeModelo, modelo):
     """
     CRISP-DM Fase 6: Salva o melhor modelo em formato pickle.
@@ -118,11 +181,23 @@ def carregarModelo(nomeModelo):
     print(f"Modelo carregado com sucesso do arquivo: '{nomeModelo}'")
     return modelo
 
-def validacaoModelo(modelo, x_validacao, y_validacao=None):
+def validacaoModelo(modelo, x_validacao, y_validacao=None, caminho_lb_bairro=CAMINHO_LB_BAIRRO):
     """
     CRISP-DM Fase 6: Validação prática / Simulação de predição em novas amostras.
+    Inclui verificação de domínio de bairros treinados.
     """
     print("\n--- Validação / Predição do Modelo ---")
+    
+    # Verificação de bairros conhecidos
+    if os.path.exists(caminho_lb_bairro):
+        with open(caminho_lb_bairro, "rb") as f:
+            lb_bairro = pickle.load(f)
+        bairros_validos_codigos = set(range(len(lb_bairro.classes_)))
+        if 'bairro_quadra' in x_validacao.columns:
+            for b in x_validacao['bairro_quadra'].unique():
+                if b not in bairros_validos_codigos:
+                    print(f"[ALERTA DE DOMÍNIO] Bairro com código '{b}' não foi contemplado no treinamento! Predição sujeita a incerteza.")
+
     y_pred = modelo.predict(x_validacao)
 
     print("Valores preditos:")
@@ -173,14 +248,21 @@ if __name__ == "__main__":
 
     if dados is not None:
         x_train, x_test, y_train, y_test = separarDados(dados)
-        listaModelos = treinarModelo(x_train, y_train)
-        melhorModelo = avaliarListaModelos(listaModelos, x_test, y_test)
+
+        # CRISP-DM Fase 4: Engenharia de Features (Média de Preço/m² por Bairro sem Data Leakage)
+        x_train_feat, x_test_feat = aplicar_target_encoding_bairro(x_train, y_train, x_test)
+
+        listaModelos = treinarModelo(x_train_feat, y_train)
+        melhorModelo = avaliarListaModelos(listaModelos, x_test_feat, y_test)
         salvarModelo(NOMEMODELO, melhorModelo)
         modeloCarregado = carregarModelo(NOMEMODELO)
 
         # Validação prática nas 5 primeiras amostras de teste
-        validacaoModelo(modeloCarregado, x_test.head(5), y_test.head(5))
+        validacaoModelo(modeloCarregado, x_test_feat.head(5), y_test.head(5))
+
+        # CRISP-DM Fase 5: Avaliação Diagnóstica Segmentada por Bairro
+        avaliarPorBairro(modeloCarregado, x_test_feat, y_test)
 
         # Gráfico de Dispersão: Preço Real vs Preço Previsto
-        y_pred_test = modeloCarregado.predict(x_test)
+        y_pred_test = modeloCarregado.predict(x_test_feat)
         graficoRealVsPredito(y_test, y_pred_test, melhorModelo.__class__.__name__)
