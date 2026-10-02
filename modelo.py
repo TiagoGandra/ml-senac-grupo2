@@ -1,7 +1,6 @@
 # CRISP-DM: Fases 4, 5 e 6 - Modelagem, Avaliação e Implantação/Predição
 import os
 import pickle
-import pandas as pd
 import numpy as np  
 
 import matplotlib

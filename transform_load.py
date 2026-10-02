@@ -100,8 +100,7 @@ def codificar_categoricas(dados):
     return dados
 
 def selecionar_colunas(dados):
-        # 1. Seleção das colunas finais
-    # basicamente uma copia do dataframe com as colunas abaixo
+    # 1. Seleção das colunas finais
     colunas_finais = [
         'preco_venda', 'tipo_imovel', 'bairro_quadra', 
         'area_util', 'quartos', 'suites', 'vagas', 'valor_condominio'
