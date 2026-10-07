@@ -1,12 +1,12 @@
-# 🏠 Previsão de Preço de Imóveis no Distrito Federal (DF)
+# Previsão de Preço de Imóveis no Distrito Federal (DF)
 
-Projeto de Machine Learning desenvolvido para o curso de Pós-Graduação/Especialização no **SENAC**, com pipeline completo baseado na metodologia **CRISP-DM**: desde o web scraping de dados imobiliários até a disponibilização em produção via **API REST (FastAPI)** e interface web interativa em **React / Next.js com TypeScript**.
+Projeto de Machine Learning desenvolvido para a Pós-Graduação de Data Science e IA no **SENAC**, com pipeline completo baseado na metodologia **CRISP-DM**: desde o web scraping de dados imobiliários até a disponibilização em produção via **API REST (FastAPI)** e interface web interativa em **React / Next.js com TypeScript**.
 
 ---
 
-## 📌 Resumo do Projeto
+## Resumo do Projeto
 
-O objetivo principal é prever o preço venal de venda de imóveis residenciais (apartamentos, casas e kitnets) em Brasília e cidades satélites do Distrito Federal com base em suas características estruturais e localização.
+O objetivo principal é prever o preço de venda de imóveis residenciais (apartamentos, casas e kitnets) em Brasília e cidades satélites do Distrito Federal com base em suas características estruturais e localização.
 
 ### Fases CRISP-DM:
 1. **Compreensão do Negócio e Coleta (Fases 1 e 2):** Web scraping automatizado no portal DF Imóveis (`scrapper-dfimoveis`), gerando a base bruta (Camada Bronze).
@@ -17,7 +17,7 @@ O objetivo principal é prever o preço venal de venda de imóveis residenciais 
 
 ---
 
-## 📊 Resultado do Modelo
+## Resultado do Modelo
 
 O algoritmo campeão nos testes de regressão foi o **RandomForestRegressor**:
 
@@ -34,13 +34,13 @@ O gráfico de dispersão compara os preços reais com os previstos em relação 
 
 ![Gráfico Preço Real vs Predito](grafico_real_vs_predito.png)
 
-### 🔗 Links da Aplicação em Produção:
-- 🚀 **Frontend Web (Vercel):** *Acesse a aplicação no link do deploy da Vercel*
-- ⚙️ **API REST / Swagger (Render):** *Acesse `/docs` na URL do seu Web Service no Render*
+### Links da Aplicação em Produção:
+- **Frontend Web (Vercel):** [*Acesse a aplicação no link do deploy da Vercel*](https://ml-senac-grupo2.vercel.app/)
+- **API REST / Swagger (Render):** [*Acesse `/docs` na URL do seu Web Service no Render*](https://ml-senac-grupo2.onrender.com/docs)
 
 ---
 
-## 🛠️ Como Rodar Localmente
+## Como Rodar Localmente
 
 ### Pré-requisitos:
 - Python 3.12+
@@ -96,15 +96,15 @@ npm run dev
 
 ---
 
-## 🚀 Como Fazer Deploy em Produção
+## Como Fazer Deploy em Produção
 
 A arquitetura do projeto separa o **Backend (Python / Machine Learning)** e o **Frontend (Next.js / TypeScript)** nas plataformas onde cada um performa melhor:
 
 ```mermaid
 flowchart LR
-    User["👤 Usuário"] --> Frontend["🌐 Frontend Next.js\n(Hospedado na Vercel)"]
-    Frontend -- "POST /predict" --> Backend["⚙️ API FastAPI\n(Hospedada no Render.com)"]
-    Backend --> Model["📦 imoveis-modelo.pickle\n(RandomForest)"]
+    User["Usuário"] --> Frontend["Frontend Next.js\n(Hospedado na Vercel)"]
+    Frontend -- "POST /predict" --> Backend["API FastAPI\n(Hospedada no Render.com)"]
+    Backend --> Model["imoveis-modelo.pickle\n(RandomForest)"]
 ```
 
 ---
@@ -144,5 +144,5 @@ O Render hospeda a API em Python e executa o modelo de ML gratuitamente:
 
 ---
 
-## 👥 Equipe
+## Equipe
 Projeto desenvolvido pelo **Grupo 2** para a disciplina de Machine Learning no SENAC.
