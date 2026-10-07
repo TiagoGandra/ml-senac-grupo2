@@ -2,7 +2,8 @@
 
 import { FormEvent, useEffect, useState } from "react";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const RAW_API_URL = process.env.NEXT_PUBLIC_API_URL?.trim() || "http://localhost:8000";
+const API_URL = RAW_API_URL.replace(/\/+$/, "");
 
 export default function Home() {
   const [tipos, setTipos] = useState<string[]>([]);
@@ -23,11 +24,14 @@ export default function Home() {
   } | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [carregandoOpcoes, setCarregandoOpcoes] = useState(false);
 
-  useEffect(() => {
+  const carregarOpcoes = () => {
+    setCarregandoOpcoes(true);
+    setErro(null);
     fetch(`${API_URL}/options`)
       .then((r) => {
-        if (!r.ok) throw new Error("Erro ao consultar a API");
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
       })
       .then((o) => {
@@ -37,8 +41,18 @@ export default function Home() {
         if (o.bairros?.length) setBairro(o.bairros[0]);
       })
       .catch(() => {
-        setErro("Não foi possível carregar as opções da API. Verifique se o servidor FastAPI está ativo na porta 8000.");
-      });
+        setErro(
+          `Não foi possível carregar as opções da API (${API_URL}). ` +
+          (API_URL.includes("localhost")
+            ? "A variável NEXT_PUBLIC_API_URL não foi definida na Vercel (está usando localhost)."
+            : "No Render (Free), o servidor pode levar até 40s para acordar.")
+        );
+      })
+      .finally(() => setCarregandoOpcoes(false));
+  };
+
+  useEffect(() => {
+    carregarOpcoes();
   }, []);
 
   async function onSubmit(e: FormEvent) {
@@ -248,13 +262,34 @@ export default function Home() {
         </form>
 
         {erro && (
-          <div className="error-card">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-              <line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
-            <span>{erro}</span>
+          <div className="error-card" style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              <span>{erro}</span>
+            </div>
+            {tipos.length === 0 && (
+              <button
+                type="button"
+                onClick={carregarOpcoes}
+                disabled={carregandoOpcoes}
+                style={{
+                  padding: "6px 14px",
+                  fontSize: "13px",
+                  fontWeight: 600,
+                  borderRadius: "6px",
+                  border: "1px solid currentColor",
+                  background: "transparent",
+                  color: "inherit",
+                  cursor: carregandoOpcoes ? "not-allowed" : "pointer",
+                }}
+              >
+                {carregandoOpcoes ? "Conectando..." : "Tentar reconectar à API"}
+              </button>
+            )}
           </div>
         )}
 
